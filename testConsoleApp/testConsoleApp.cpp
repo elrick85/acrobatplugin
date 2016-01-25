@@ -2,18 +2,25 @@
 //
 
 #include "stdafx.h"
+#include "json\json.h"
 #include <string>
 #include <iostream>
+#include <fstream>
 #include <windows.h>
 #include "OutInfo.h"
+#include <direct.h>
 
 #pragma warning( disable : 4800 ) // stupid warning about bool
+
 #define BUFSIZE 4096
+#define GetCurrentDir _getcwd
+
 HANDLE g_hChildStd_OUT_Rd = NULL;
 HANDLE g_hChildStd_OUT_Wr = NULL;
 HANDLE g_hChildStd_ERR_Rd = NULL;
 HANDLE g_hChildStd_ERR_Wr = NULL;
 
+char * GetCurrentDirPath();
 PROCESS_INFORMATION CreateChildProcess(wchar_t commandLine[]);
 void ReadFromPipe(PROCESS_INFORMATION);
 OutInfo ReadFromPipeToObject(PROCESS_INFORMATION piProcInfo);
@@ -21,21 +28,33 @@ OutInfo RunProcess(char * argv[], wchar_t command[]);
 
 int _tmain(int argc, char * argv[])
 {
-	printf("\n->Start of parent execution.\n");
+	
+	Json::Value root;
 
-	wchar_t input[] = L"D:\\Dev\\perkinelmer\\common\\external\\PdfTool\\ScriptManager\\PdfTool.ScriptManager.exe -help";
+	std::ifstream config_doc("D:\\Dev\\perkinelmer\\projects\\engine-gc\\package.json", std::ifstream::binary);
+	config_doc >> root;
 
-	OutInfo outInfo = RunProcess(argv, input);
+	Json::Value jName = root["name"];
+	std::string name = jName.asString();
 
-	std::cout << "stdout:" << outInfo.out << std::endl;
-	std::cout << "stderr:" << outInfo.err << std::endl;
-
-	printf("\n->End of parent execution.\n");
+	std::cout << "name:" << name << std::endl;
 
 	// The remaining open handles are cleaned up when this process terminates. 
 	// To avoid resource leaks in a larger application, 
 	//   close handles explicitly.
 	return 0;
+}
+
+char * GetCurrentDirPath()
+{
+	char* buffer;
+
+	if ((buffer = _getcwd(NULL, 0)) == NULL)
+		return "";
+	else
+	{
+		return buffer;
+	}
 }
 
 OutInfo RunProcess(char * argv[], wchar_t command[]) {

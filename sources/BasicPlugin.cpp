@@ -17,7 +17,9 @@
 - This file implements the functionality of the BasicPlugin.
 *********************************************************************/
 
+#include <string>
 #include "OutInfo.h"
+#include <direct.h>
 
 // Acrobat Headers.
 #ifndef MAC_PLATFORM
@@ -39,6 +41,12 @@ const char* MyPluginExtensionName = "ADBE:BasicPlugin";
 */
 ACCB1 ASBool ACCB2 PluginMenuItem(void);
 OutInfo RunProcess(char * command);
+const char * GetCurrentDirPath();
+char * GetCurrentDocPath();
+void RunReportCommand(char * reportType, char * jsAction);
+
+AVDoc currentDoc;
+PDDoc currentPdfDoc;
 
 /*-------------------------------------------------------
 	Functions
@@ -103,15 +111,18 @@ void RunSimpleCommand(char * comandLine)
 	char str[256] = "There is no PDF document loaded in Acrobat.";
 
 	// try to get front PDF document 
-	AVDoc avDoc = AVAppGetActiveDoc();
+	if (currentDoc == NULL){
+		currentDoc = AVAppGetActiveDoc();
+	}
+
 	gAcroFormHFT = Init_AcroFormHFT;
 
-	if (avDoc == NULL) {
+	if (currentDoc == NULL) {
 		AVAlertNote(str);
 	}
 	else {
-		PDDoc pdDoc = AVDocGetPDDoc(avDoc);
-		ASBool  bRc = AFExecuteThisScript(pdDoc, comandLine, NULL);
+		currentPdfDoc = AVDocGetPDDoc(currentDoc);
+		ASBool bRc = AFExecuteThisScript(currentPdfDoc, comandLine, NULL);
 	}
 }
 
@@ -211,34 +222,74 @@ ACCB1 void ACCB2 VisitOneSourcePageCommand(void *clientData)
 	ShellExecute(NULL, "open", "http://www.perkinelmer.com/onesource/", NULL, NULL, SW_SHOWNORMAL);
 }
 
+ACCB1 void ACCB2 GetFontReportCommand(void *clientData)
+{
+	char * scriptAction = "showWin(lm);";
+	char * fType = "fonts";
+	RunReportCommand(fType, scriptAction);
+}
+
+const char * GetCurrentDirPath()
+{
+	ASFileSys asfs;
+	ASPathName asp;
+	ASPathName rsp;
+
+	ZeroMemory(&asfs, sizeof(ASFileSys));
+	ZeroMemory(&asp, sizeof(ASPathName));
+
+	AVAcquireSpecialFolderPathName(kAVSCApp, kAVSFPlugIns, false, &asfs, &asp);
+
+	ASText asText = ASTextNew();
+	
+	ASFileSysDisplayASTextFromPath(asfs, asp, asText);
+
+	ASScript bestScript = ASTextGetBestScript(asText, kASEUnicodeScript);
+	const char * res = ASTextGetScriptText(asText, kASEUnicodeScript);
+	return res;
+	
+	//return ASFileSysDIPathFromPath(asfs, asp, rsp);
+}
+
+char * GetCurrentDocPath()
+{
+	currentPdfDoc = AVDocGetPDDoc(currentDoc);
+
+	ASFile fileinfo = PDDocGetFile(currentPdfDoc);
+	ASFileSys fileSys = ASFileGetFileSys(fileinfo);
+	ASPathName pathname = ASFileAcquirePathName(fileinfo);
+
+	return ASFileSysDisplayStringFromPath(fileSys, pathname);
+}
+
 /* Run external process
 ** ------------------------------------------------------
 */
-ACCB1 void ACCB2 RunExternalCommand(void *clientData)
+void RunReportCommand(char * reportType, char * jsAction)
 {
-	AVDoc avDoc = AVAppGetActiveDoc();
+	if (currentDoc == NULL) {
+		currentDoc = AVAppGetActiveDoc();
+	}
 
-	if (avDoc != NULL) {
-		PDDoc pdDoc = AVDocGetPDDoc(avDoc);
-		ASFile fileinfo = PDDocGetFile(pdDoc);
-		ASFileSys fileSys = ASFileGetFileSys(fileinfo);
-		ASPathName pathname = ASFileAcquirePathName(fileinfo);
+	if (currentDoc != NULL) {
+		char scriptCommand[1000];
+		char commandLine[1000];
+		char* result = GetCurrentDocPath();
 
-		char * scriptCommand;
-		char * commandLine;
+		std::string dpath(GetCurrentDirPath());
 
-		char * result = ASFileSysDisplayStringFromPath(fileSys, pathname);
-
-		char scriptManager[] = "D:\\Dev\\perkinelmer\\common\\external\\PdfTool\\ScriptManager\\PdfTool.ScriptManager.exe";
+		std::string scriptManager = dpath + "\\BusicPlugin\\PdfTool.ScriptManager.exe";
 		const char command[] = "%s -a %s -t %s -in \"%s\"";
-		const char scriptAction[] = "showWin(\"%s\");";
+		char * scriptAction = jsAction;
 
-		std::sprintf(commandLine, command, scriptManager, "report", "fonts", result);
+		sprintf(commandLine, command, scriptManager.c_str(), "report", reportType, result);
 
 		OutInfo outInfo = RunProcess(commandLine);
 
-		std::sprintf(scriptCommand, scriptAction, outInfo.out);
+		std::string sa(scriptAction);
+		std::string vr = "eval('var lm = " + outInfo.out + ";');";
+		std::string rs = vr + sa;
 
-		RunSimpleCommand(scriptCommand);
+		RunSimpleCommand((char *)rs.c_str());
 	}
 }

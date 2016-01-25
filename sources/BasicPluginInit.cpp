@@ -25,6 +25,8 @@
 #include "PIHeaders.h"
 #endif
 
+#include "InvokeCommand.h"
+
 /*-------------------------------------------------------
 	Constants/Declarations
 	-------------------------------------------------------*/
@@ -49,13 +51,15 @@ extern ACCB1 void ACCB2 ExportAllAsFDFCommand(void *clientData);
 extern ACCB1 void ACCB2 ExportPageAsFDF(void *clientData);
 
 extern ACCB1 void ACCB2 VisitOneSourcePageCommand(void *clientData);
-extern ACCB1 void ACCB2 RunExternalCommand(void *clientData);
+extern ACCB1 void ACCB2 GetFontReportCommand(void *clientData);
 
 extern ACCB1 ASBool ACCB2 ValidationIsEnabled(void *clientData);
 extern ACCB1 ASBool ACCB2 CommonIsEnabled(void *clientData);
 extern ACCB1 ASBool ACCB2 AlwaysEnabled(void *clientData);
 
 extern ACCB1 ASBool ACCB2 MyPluginSetmenu();
+
+extern void RunReportCommand(char * reportType, char * jsAction);
 
 extern const char* MyPluginExtensionName;
 
@@ -202,14 +206,14 @@ ACCB1 ASBool ACCB2 PluginMenuItem()
 {
 	AVMenubar menubar = AVAppGetMenubar();
 	AVMenu volatile commonMenu = NULL;
-		
+
 	if (!menubar){
 		return false;
 	}
 
 	DURING
 
-	commonMenu = AVMenubarAcquireMenuByName(menubar, "ADBE:PerkinElmer");
+		commonMenu = AVMenubarAcquireMenuByName(menubar, "ADBE:PerkinElmer");
 
 	// if "Acrobat SDK" menu is not existing, create one.
 	if (!commonMenu) {
@@ -241,7 +245,11 @@ ACCB1 ASBool ACCB2 PluginMenuItem()
 
 	AddSeparator(commonMenu, "ADBE:separator4");
 
-	AddMenuItemExt(commonMenu, "Run External", "ADBE:Run_External", RunExternalCommand, AlwaysEnabled);
+	AddMenuItemExt(commonMenu, "report->fonts", "ADBE:Report_Fonts", GetFontReportCommand, CommonIsEnabled);
+
+	//InvokeCommand sm("report->fonts", "ADBE:Report_Fonts", "report", "fonts", "showWin(lm);", "common");
+
+	//AddMenuItemExt(commonMenu, "report->fonts", "ADBE:Report_Fonts", sm.invoke, CommonIsEnabled);
 
 	AVMenuRelease(commonMenu);
 
@@ -250,10 +258,10 @@ ACCB1 ASBool ACCB2 PluginMenuItem()
 			AVMenuRelease(commonMenu);
 		}
 
-		return false;
+	return false;
 	END_HANDLER
 
-	return true;
+		return true;
 }
 
 void AddMenuItemExt(AVMenu commonMenu, char * title, char * name, AVExecuteProc command, AVComputeEnabledProc enable){
