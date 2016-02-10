@@ -43,9 +43,9 @@ namespace WinLb
 		
 		public string GetStr()
 		{
-			mApp = new AcroAppClass();
+			//mApp = new AcroAppClass();
 
-			mApp.Lock();
+			//mApp.Lock();
 			//CreateWindow("MainWClass", "Sample", Enums.WindowStyles.WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, null, null, null, null);
 
 			var form = new MyForm();
