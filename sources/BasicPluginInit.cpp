@@ -19,39 +19,41 @@
  - A convenient function is provided to add a menu item easily.
 
  *********************************************************************/
+#include <iostream>
+#include <fstream>
+#include "json.h"
 
 // Acrobat Headers.
 #ifndef MAC_PLATFORM
 #include "PIHeaders.h"
 #endif
 
-#include "InvokeCommand.h"
-
 /*-------------------------------------------------------
 	Constants/Declarations
 	-------------------------------------------------------*/
 // stuff for Menu set up 
-static AVMenuItem menuItem = NULL;
+static std::vector<AVMenuItem> menuV;
+
 ACCB1 ASBool ACCB2 PluginMenuItem(void);
-void AddMenuItemExt(AVMenu commonMenu, char * title, char * name, AVExecuteProc command, AVComputeEnabledProc enable);
 
-void AddSeparator(AVMenu commonMenu, char * name);
+void AddMenuItemExt(AVMenu commonMenu, std::string title, std::string name, AVExecuteProc command, AVComputeEnabledProc enable, void* data);
+void AddSeparator(AVMenu commonMenu, std::string name);
 
-// callback functions implemented in file "BasicPlugin.cpp"
-extern ACCB1 void ACCB2 ValidationMockCommand(void *clientData);
-extern ACCB1 void ACCB2 ValidationRunCommand(void *clientData);
-extern ACCB1 void ACCB2 ValidationResetCommand(void *clientData);
-extern ACCB1 void ACCB2 PrepareFileForSendingCommand(void *clientData);
-extern ACCB1 void ACCB2 ChangeFontsToHelvCommand(void *clientData);
-extern ACCB1 void ACCB2 ChangeCalcOrderCommand(void *clientData);
-extern ACCB1 void ACCB2 CheckAllPrintCheckboxesCommand(void *clientData);
-extern ACCB1 void ACCB2 UncheckAllPrintCheckboxesCommand(void *clientData);
-extern ACCB1 void ACCB2 ImportFDFCommand(void *clientData);
-extern ACCB1 void ACCB2 ExportAllAsFDFCommand(void *clientData);
-extern ACCB1 void ACCB2 ExportPageAsFDF(void *clientData);
+void InitMenuItem(Json::Value data, AVMenu commonMenu);
+void CreateMenuItemReport(Json::Value data, AVMenu commonMenu);
+void CreateMenuItemRemove(Json::Value data, AVMenu commonMenu);
+void CreateMenuItemSeparator(Json::Value data, AVMenu commonMenu);
+void CreateMenuItemWebCommand(Json::Value data, AVMenu commonMenu);
+void CreateMenuItemJs(Json::Value data, AVMenu commonMenu);
 
-extern ACCB1 void ACCB2 VisitOneSourcePageCommand(void *clientData);
-extern ACCB1 void ACCB2 GetFontReportCommand(void *clientData);
+AVComputeEnabledProc GetEnableProc(Json::Value data);
+
+Json::Value GetConfigFromFile();
+
+extern ACCB1 void ACCB2 VisitWebPageCommand(void *clientData);
+extern ACCB1 void ACCB2 GetReportCommand(void *clientData);
+extern ACCB1 void ACCB2 GetRemoveCommand(void *clientData);
+extern ACCB1 void ACCB2 RunJsCommand(void *clientData);
 
 extern ACCB1 ASBool ACCB2 ValidationIsEnabled(void *clientData);
 extern ACCB1 ASBool ACCB2 CommonIsEnabled(void *clientData);
@@ -60,6 +62,7 @@ extern ACCB1 ASBool ACCB2 AlwaysEnabled(void *clientData);
 extern ACCB1 ASBool ACCB2 MyPluginSetmenu();
 
 extern void RunReportCommand(char * reportType, char * jsAction);
+extern const char * GetCurrentDirPath();
 
 extern const char* MyPluginExtensionName;
 
@@ -120,8 +123,10 @@ ACCB1 ASBool ACCB2 PluginInit(void)
 	*/
 ACCB1 ASBool ACCB2 PluginUnload(void)
 {
-	if (menuItem)
-		AVMenuItemRemove(menuItem);
+	for (int i = 0; i < menuV.size(); ++i)
+	{
+		AVMenuItemRemove(menuV[i]);
+	}
 
 	return true;
 }
@@ -135,6 +140,18 @@ ASAtom GetExtensionName()
 	return ASAtomFromString(MyPluginExtensionName);
 }
 
+Json::Value GetConfigFromFile()
+{
+	Json::Value root;
+
+	std::string dpath(GetCurrentDirPath());
+
+	std::ifstream config_doc(dpath + "\\PerkinElmer\\config.json", std::ifstream::binary);
+	
+	config_doc >> root;
+
+	return root;
+}
 
 /**
 	Function that provides the initial interface between your plug-in and the application.
@@ -221,35 +238,14 @@ ACCB1 ASBool ACCB2 PluginMenuItem()
 		AVMenubarAddMenu(menubar, commonMenu, APPEND_MENU);
 	}
 
-	AddMenuItemExt(commonMenu, "Validation->Mock", "ADBE:Validation_Mock", ValidationMockCommand, ValidationIsEnabled);
-	AddMenuItemExt(commonMenu, "Validation->Run", "ADBE:Validation_Run", ValidationRunCommand, ValidationIsEnabled);
-	AddMenuItemExt(commonMenu, "Validation->Reset", "ADBE:Validation_Reset", ValidationResetCommand, ValidationIsEnabled);
+	Json::Value cfg = GetConfigFromFile();
+	const Json::Value& mCfg = cfg["menu"];
 
-	AddSeparator(commonMenu, "ADBE:separator1");
-
-	AddMenuItemExt(commonMenu, "Reset before publish", "ADBE:Reset_before_publish", PrepareFileForSendingCommand, CommonIsEnabled);
-	AddMenuItemExt(commonMenu, "Change All Fonts to Helvetica", "ADBE:Change_Fonts", ChangeFontsToHelvCommand, CommonIsEnabled);
-	AddMenuItemExt(commonMenu, "Fix Calc Order", "ADBE:Fix_Calc_Order", ChangeCalcOrderCommand, CommonIsEnabled);
-	AddMenuItemExt(commonMenu, "Check Print Checkboxes", "ADBE:Check_Print_Checkboxes", CheckAllPrintCheckboxesCommand, CommonIsEnabled);
-	AddMenuItemExt(commonMenu, "Uncheck Print Checkboxes", "ADBE:Uncheck_Print_Checkboxes", UncheckAllPrintCheckboxesCommand, CommonIsEnabled);
-
-	AddSeparator(commonMenu, "ADBE:separator3");
-
-	AddMenuItemExt(commonMenu, "fdf->import", "ADBE:Import_FDF", ImportFDFCommand, CommonIsEnabled);
-	AddMenuItemExt(commonMenu, "fdf->export all", "ADBE:Export_FDF", ExportAllAsFDFCommand, CommonIsEnabled);
-	AddMenuItemExt(commonMenu, "fdf->export page", "ADBE:Export_Page_FDF", ExportPageAsFDF, CommonIsEnabled);
-
-	AddSeparator(commonMenu, "ADBE:separator2");
-
-	AddMenuItemExt(commonMenu, "Visit OneSource Page", "ADBE:Visit_OneSource_Page", VisitOneSourcePageCommand, AlwaysEnabled);
-
-	AddSeparator(commonMenu, "ADBE:separator4");
-
-	AddMenuItemExt(commonMenu, "report->fonts", "ADBE:Report_Fonts", GetFontReportCommand, CommonIsEnabled);
-
-	//InvokeCommand sm("report->fonts", "ADBE:Report_Fonts", "report", "fonts", "showWin(lm);", "common");
-
-	//AddMenuItemExt(commonMenu, "report->fonts", "ADBE:Report_Fonts", sm.invoke, CommonIsEnabled);
+	for (Json::ValueConstIterator it = mCfg.begin(); it != mCfg.end(); ++it)
+	{
+		const Json::Value& book = *it;
+		InitMenuItem(book, commonMenu);
+	}
 
 	AVMenuRelease(commonMenu);
 
@@ -264,17 +260,126 @@ ACCB1 ASBool ACCB2 PluginMenuItem()
 		return true;
 }
 
-void AddMenuItemExt(AVMenu commonMenu, char * title, char * name, AVExecuteProc command, AVComputeEnabledProc enable){
-	menuItem = AVMenuItemNew(title, name, NULL, true, NO_SHORTCUT, 0, NULL, gExtensionID);
+void InitMenuItem(Json::Value data, AVMenu commonMenu)
+{
+	std::string aType = data["type"].asString();
 
-	AVMenuItemSetExecuteProc(menuItem, ASCallbackCreateProto(AVExecuteProc, command), NULL);
+	if (aType == "separator")
+	{
+		CreateMenuItemSeparator(data, commonMenu);
+	}
+
+	if (aType == "web")
+	{
+		CreateMenuItemWebCommand(data, commonMenu);
+	}
+
+	if (aType == "report")
+	{
+		CreateMenuItemReport(data, commonMenu);
+	}
+
+	if (aType == "remove")
+	{
+		CreateMenuItemRemove(data, commonMenu);
+	}
+
+	if (aType == "js")
+	{
+		CreateMenuItemJs(data, commonMenu);
+	}
+}
+
+void CreateMenuItemJs(Json::Value data, AVMenu commonMenu)
+{
+	AVExecuteProc cmdProc = RunJsCommand;
+	AVComputeEnabledProc enableProc = GetEnableProc(data);
+
+	std::string action = data["action"].asString();
+	void *vp = static_cast<void*>(new std::string(action.c_str()));
+
+	AddMenuItemExt(commonMenu, data["title"].asString(), data["name"].asString(), cmdProc, enableProc, vp);
+}
+
+void CreateMenuItemReport(Json::Value data, AVMenu commonMenu)
+{
+	AVExecuteProc cmdProc = GetReportCommand;
+	AVComputeEnabledProc enableProc = GetEnableProc(data);
+
+	void *vp = static_cast<void*>(new Json::Value(data));
+
+	AddMenuItemExt(commonMenu, data["title"].asString(), data["name"].asString(), cmdProc, enableProc, vp);
+}
+
+void CreateMenuItemRemove(Json::Value data, AVMenu commonMenu)
+{
+	AVExecuteProc cmdProc = GetRemoveCommand;
+	AVComputeEnabledProc enableProc = GetEnableProc(data);
+
+	std::string action = data["command"].asString();
+	void *vp = static_cast<void*>(new std::string(action.c_str()));
+
+	AddMenuItemExt(commonMenu, data["title"].asString(), data["name"].asString(), cmdProc, enableProc, vp);
+}
+
+void CreateMenuItemSeparator(Json::Value data, AVMenu commonMenu)
+{
+	std::string aName = data["name"].asString();
+
+	AddSeparator(commonMenu, data["name"].asString());
+}
+
+void CreateMenuItemWebCommand(Json::Value data, AVMenu commonMenu)
+{
+	AVExecuteProc cmdProc = VisitWebPageCommand;
+	AVComputeEnabledProc enableProc = GetEnableProc(data);
+
+	std::string url = data["url"].asString();
+	void *vp = static_cast<void*>(new std::string(url.c_str()));
+
+	AddMenuItemExt(commonMenu, data["title"].asString(), data["name"].asString(), cmdProc, enableProc, vp);
+}
+
+AVComputeEnabledProc GetEnableProc(Json::Value data)
+{
+	AVComputeEnabledProc enableProc;
+
+	std::string enableFlag = data["enable"].asString();
+
+	if (enableFlag == "always")
+	{
+		enableProc = AlwaysEnabled;
+	}
+
+	if (enableFlag == "common")
+	{
+		enableProc = CommonIsEnabled;
+	}
+
+	if (enableFlag == "validate")
+	{
+		enableProc = ValidationIsEnabled;
+	}
+
+	return enableProc;
+}
+
+void AddMenuItemExt(AVMenu commonMenu, std::string title, std::string name, AVExecuteProc command, AVComputeEnabledProc enable, void* data)
+{
+	AVMenuItem menuItem = AVMenuItemNew(title.c_str(), name.c_str(), NULL, true, NO_SHORTCUT, 0, NULL, gExtensionID);
+
+	AVMenuItemSetExecuteProc(menuItem, ASCallbackCreateProto(AVExecuteProc, command), data);
 	AVMenuItemSetComputeEnabledProc(menuItem, ASCallbackCreateProto(AVComputeEnabledProc, enable), (void *)pdPermEdit);
 
 	AVMenuAddMenuItem(commonMenu, menuItem, APPEND_MENUITEM);
+
+	menuV.push_back(menuItem);
 }
 
-void AddSeparator(AVMenu commonMenu, char * name)
+void AddSeparator(AVMenu commonMenu, std::string name)
 {
-	menuItem = AVMenuItemNew("-", name, NULL, true, NO_SHORTCUT, 0, NULL, gExtensionID);
+	AVMenuItem menuItem = AVMenuItemNew("-", name.c_str(), NULL, true, NO_SHORTCUT, 0, NULL, gExtensionID);
 	AVMenuAddMenuItem(commonMenu, menuItem, APPEND_MENUITEM);
+
+	menuV.push_back(menuItem);
 }

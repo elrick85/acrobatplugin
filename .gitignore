@@ -10,3 +10,5 @@
 /testConsoleApp/testConsoleApp.vcxproj.user
 /testConsoleApp/testConsoleApp.vcxproj.filters
 /win32/BasicPlugin.vcxproj.user
+/WinLb/obj
+/WinLb/bin

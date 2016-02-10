@@ -80,6 +80,10 @@ if not "%SDKPIDir%"a == ""a echo "$(targetname)" copied to "%SDKPIDir%".
 if "%SDKPIDir%"a == ""a echo not performed. SDKPIDir environment variable not set.
 </Command>
     </PostBuildEvent>
+    <CustomBuildStep>
+      <Command>
+      </Command>
+    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\sources\BasicPlugin.cpp">
@@ -95,7 +99,7 @@ if "%SDKPIDir%"a == ""a echo not performed. SDKPIDir environment variable not se
       <BrowseInformation Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</BrowseInformation>
     </ClCompile>
     <ClCompile Include="..\..\..\Headers\Api\PIMain.c" />
-    <ClCompile Include="..\sources\InvokeCommand.cpp" />
+    <ClCompile Include="..\sources\jsoncpp.cpp" />
     <ClCompile Include="..\sources\OutInfo.cpp" />
     <ClCompile Include="..\sources\RunExternal.cpp" />
   </ItemGroup>
@@ -103,7 +107,8 @@ if "%SDKPIDir%"a == ""a echo not performed. SDKPIDir environment variable not se
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\sources\InvokeCommand.h" />
+    <ClInclude Include="..\sources\json-forwards.h" />
+    <ClInclude Include="..\sources\json.h" />
     <ClInclude Include="..\sources\OutInfo.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -15,6 +15,8 @@
 #define BUFSIZE 4096
 #define GetCurrentDir _getcwd
 
+#import "..\WinLb\bin\Debug\WinLb.tlb" raw_interfaces_only
+
 HANDLE g_hChildStd_OUT_Rd = NULL;
 HANDLE g_hChildStd_OUT_Wr = NULL;
 HANDLE g_hChildStd_ERR_Rd = NULL;
@@ -26,10 +28,27 @@ void ReadFromPipe(PROCESS_INFORMATION);
 OutInfo ReadFromPipeToObject(PROCESS_INFORMATION piProcInfo);
 OutInfo RunProcess(char * argv[], wchar_t command[]);
 
+using namespace WinLb;
+
 int _tmain(int argc, char * argv[])
 {
 	
-	Json::Value root;
+	// Initialize COM.
+	HRESULT hr = CoInitialize(NULL);
+
+	// Create the interface pointer.
+	ITestClassPtr pICalc(__uuidof(TestClass));
+
+	std::wstring s1;
+	BSTR ss = SysAllocStringLen(s1.data(), s1.size());
+
+	pICalc->GetStr(&ss);
+
+	std::wstring ws(ss, SysStringLen(ss));
+
+	std::wcout << "_ss:" << ws << std::endl;
+
+	/*Json::Value root;
 
 	std::ifstream config_doc("D:\\Dev\\perkinelmer\\projects\\engine-gc\\package.json", std::ifstream::binary);
 	config_doc >> root;
@@ -37,11 +56,15 @@ int _tmain(int argc, char * argv[])
 	Json::Value jName = root["name"];
 	std::string name = jName.asString();
 
-	std::cout << "name:" << name << std::endl;
+	std::cout << "name:" << name << std::endl;*/
 
 	// The remaining open handles are cleaned up when this process terminates. 
 	// To avoid resource leaks in a larger application, 
 	//   close handles explicitly.
+
+	// Uninitialize COM.
+	CoUninitialize();
+
 	return 0;
 }
 

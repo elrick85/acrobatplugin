@@ -20,6 +20,7 @@
 #include <string>
 #include "OutInfo.h"
 #include <direct.h>
+#include "json.h"
 
 // Acrobat Headers.
 #ifndef MAC_PLATFORM
@@ -40,13 +41,17 @@ const char* MyPluginExtensionName = "ADBE:BasicPlugin";
 /* A convenient function to add a menu item for your plugin.
 */
 ACCB1 ASBool ACCB2 PluginMenuItem(void);
+
 OutInfo RunProcess(char * command);
+
 const char * GetCurrentDirPath();
 char * GetCurrentDocPath();
-void RunReportCommand(char * reportType, char * jsAction);
 
-AVDoc currentDoc;
-PDDoc currentPdfDoc;
+void RunReportCommand(const char * reportType, const char * jsAction);
+void RunRemoveCommand(const char * removeTarget);
+
+Json::Value GetConfigFromFile();
+
 
 /*-------------------------------------------------------
 	Functions
@@ -105,15 +110,16 @@ ACCB1 ASBool ACCB2 ValidationIsEnabled(void *clientData)
 	return vOut;
 }
 
-void RunSimpleCommand(char * comandLine)
+/* Run simple js command
+** ------------------------------------------------------
+*/
+void RunSimpleCommand(const char * comandLine)
 {
 	// get this plugin's name for display
 	char str[256] = "There is no PDF document loaded in Acrobat.";
 
-	// try to get front PDF document 
-	if (currentDoc == NULL){
-		currentDoc = AVAppGetActiveDoc();
-	}
+	AVDoc currentDoc = AVAppGetActiveDoc();
+	PDDoc currentPdfDoc;
 
 	gAcroFormHFT = Init_AcroFormHFT;
 
@@ -126,109 +132,56 @@ void RunSimpleCommand(char * comandLine)
 	}
 }
 
-/* ValidationMockCommand
+/* Callback for menu items to run simple js command
 ** ------------------------------------------------------
 */
-ACCB1 void ACCB2 ValidationMockCommand(void *clientData)
+ACCB1 void ACCB2 RunJsCommand(void *clientData)
 {
-	RunSimpleCommand("tstf.handler(this, 'mock')");
+	std::string* sp = static_cast<std::string*>(clientData);
+	std::string s = *sp;
+
+	RunSimpleCommand(s.c_str());
 }
 
-/* ValidationRunCommand
+/* Callback for menu items to visit web page
 ** ------------------------------------------------------
 */
-ACCB1 void ACCB2 ValidationRunCommand(void *clientData)
+ACCB1 void ACCB2 VisitWebPageCommand(void *clientData)
 {
-	RunSimpleCommand("tstf.handler(this, 'run')");
+	std::string* sp = static_cast<std::string*>(clientData);
+	std::string s = *sp;
+
+	ShellExecute(NULL, "open", s.c_str(), NULL, NULL, SW_SHOWNORMAL);
 }
 
-/* ValidationResetCommand
+/* Callback for menu items to get report
 ** ------------------------------------------------------
 */
-ACCB1 void ACCB2 ValidationResetCommand(void *clientData)
+ACCB1 void ACCB2 GetReportCommand(void *clientData)
 {
-	RunSimpleCommand("tstf.handler(this, 'unmock')");
+	Json::Value* sp = static_cast<Json::Value*>(clientData);
+	Json::Value vl = *sp;
+
+	std::string scriptAction = vl["action"].asString();
+	std::string fType = vl["command"].asString();
+
+	RunReportCommand(fType.c_str(), scriptAction.c_str());
 }
 
-/* Reset before publish
+/* Callback for menu items to remove some data.
 ** ------------------------------------------------------
 */
-ACCB1 void ACCB2 PrepareFileForSendingCommand(void *clientData)
+ACCB1 void ACCB2 GetRemoveCommand(void *clientData)
 {
-	RunSimpleCommand("Helper.prepareFileForSending()");
+	std::string* sp = static_cast<std::string*>(clientData);
+	std::string s = *sp;
+
+	RunRemoveCommand(s.c_str());
 }
 
-/* Change All Fonts to Helvetica
+/* Get plugin dir path
 ** ------------------------------------------------------
 */
-ACCB1 void ACCB2 ChangeFontsToHelvCommand(void *clientData)
-{
-	RunSimpleCommand("changeAllFonts(this);");
-}
-
-/* Fix Calc Order
-** ------------------------------------------------------
-*/
-ACCB1 void ACCB2 ChangeCalcOrderCommand(void *clientData)
-{
-	RunSimpleCommand("changeCalcOrder(this);");
-}
-
-/* Check Print Checkboxes
-** ------------------------------------------------------
-*/
-ACCB1 void ACCB2 CheckAllPrintCheckboxesCommand(void *clientData)
-{
-	RunSimpleCommand("checkAllPrintCheckboxes(this);");
-}
-
-/* Uncheck Print Checkboxes
-** ------------------------------------------------------
-*/
-ACCB1 void ACCB2 UncheckAllPrintCheckboxesCommand(void *clientData)
-{
-	RunSimpleCommand("uncheckAllPrintCheckboxes(this);");
-}
-
-/* Import FDF
-** ------------------------------------------------------
-*/
-ACCB1 void ACCB2 ImportFDFCommand(void *clientData)
-{
-	RunSimpleCommand("Helper.importFDF();");
-}
-
-/* Export all data as FDF
-** ------------------------------------------------------
-*/
-ACCB1 void ACCB2 ExportAllAsFDFCommand(void *clientData)
-{
-	RunSimpleCommand("exportAllAsFDF(this);");
-}
-
-/* Export page data as FDF
-** ------------------------------------------------------
-*/
-ACCB1 void ACCB2 ExportPageAsFDF(void *clientData)
-{
-	RunSimpleCommand("exportPageAsFDF(this);");
-}
-
-/* Visit OneSource Page
-** ------------------------------------------------------
-*/
-ACCB1 void ACCB2 VisitOneSourcePageCommand(void *clientData)
-{
-	ShellExecute(NULL, "open", "http://www.perkinelmer.com/onesource/", NULL, NULL, SW_SHOWNORMAL);
-}
-
-ACCB1 void ACCB2 GetFontReportCommand(void *clientData)
-{
-	char * scriptAction = "showWin(lm);";
-	char * fType = "fonts";
-	RunReportCommand(fType, scriptAction);
-}
-
 const char * GetCurrentDirPath()
 {
 	ASFileSys asfs;
@@ -241,55 +194,124 @@ const char * GetCurrentDirPath()
 	AVAcquireSpecialFolderPathName(kAVSCApp, kAVSFPlugIns, false, &asfs, &asp);
 
 	ASText asText = ASTextNew();
-	
+
 	ASFileSysDisplayASTextFromPath(asfs, asp, asText);
 
-	ASScript bestScript = ASTextGetBestScript(asText, kASEUnicodeScript);
 	const char * res = ASTextGetScriptText(asText, kASEUnicodeScript);
+
 	return res;
-	
-	//return ASFileSysDIPathFromPath(asfs, asp, rsp);
 }
 
+/* Get current doc path
+** ------------------------------------------------------
+*/
 char * GetCurrentDocPath()
 {
-	currentPdfDoc = AVDocGetPDDoc(currentDoc);
+	AVDoc currentDoc = AVAppGetActiveDoc();
 
-	ASFile fileinfo = PDDocGetFile(currentPdfDoc);
-	ASFileSys fileSys = ASFileGetFileSys(fileinfo);
-	ASPathName pathname = ASFileAcquirePathName(fileinfo);
+	ASFile fileinfo;
+	ASFileSys fileSys;
+	ASPathName pathname;
+
+	if (currentDoc != NULL) {
+		PDDoc currentPdfDoc = AVDocGetPDDoc(currentDoc);
+
+		fileinfo = PDDocGetFile(currentPdfDoc);
+		fileSys = ASFileGetFileSys(fileinfo);
+		pathname = ASFileAcquirePathName(fileinfo);
+	}
 
 	return ASFileSysDisplayStringFromPath(fileSys, pathname);
 }
 
-/* Run external process
-** ------------------------------------------------------
-*/
-void RunReportCommand(char * reportType, char * jsAction)
+char * GetTmpFilePath()
 {
-	if (currentDoc == NULL) {
-		currentDoc = AVAppGetActiveDoc();
+	DWORD dwRetVal = 0;
+
+	char wcharPath[MAX_PATH];
+	char filePath[MAX_PATH];
+
+	dwRetVal = GetTempPath(MAX_PATH, wcharPath);
+
+	if (dwRetVal > MAX_PATH || (dwRetVal == 0))
+	{
+		return "empty";
 	}
 
-	if (currentDoc != NULL) {
+	GetTempFileNameA(wcharPath, "PE_", 0, filePath);
+
+	return filePath;
+}
+
+/* Run report process
+** ------------------------------------------------------
+*/
+void RunReportCommand(const char * reportType, const char * jsAction)
+{
+	char scriptCommand[1000];
+	char commandLine[1000];
+	char* result = GetCurrentDocPath();
+
+	std::string dpath(GetCurrentDirPath());
+
+	std::string scriptManager = dpath + "\\PerkinElmer\\PdfTool.ScriptManager.exe";
+	const char command[] = "%s -a %s -t %s -in \"%s\"";
+	const char * scriptAction = jsAction;
+
+	sprintf(commandLine, command, scriptManager.c_str(), "report", reportType, result);
+
+	OutInfo outInfo = RunProcess(commandLine);
+
+	std::string sa(scriptAction);
+	std::string vr = "eval('var lm = " + outInfo.out + ";');";
+	std::string rs = vr + sa;
+
+	RunSimpleCommand((char *)rs.c_str());
+}
+
+void RunRemoveCommand(const char * removeTarget)
+{
+	AVDoc avDoc = AVAppGetActiveDoc();
+
+	if (avDoc != NULL)
+	{
 		char scriptCommand[1000];
 		char commandLine[1000];
+		char _outFilePath[MAX_PATH];
+		char _resultPath[MAX_PATH];
+
 		char* result = GetCurrentDocPath();
 
 		std::string dpath(GetCurrentDirPath());
 
-		std::string scriptManager = dpath + "\\BusicPlugin\\PdfTool.ScriptManager.exe";
-		const char command[] = "%s -a %s -t %s -in \"%s\"";
-		char * scriptAction = jsAction;
+		std::string scriptManager = dpath + "\\PerkinElmer\\PdfTool.StructureManager.exe";
+		const char command[] = "%s -a %s -t %s -optim -in \"%s\" -out \"%s\"";
 
-		sprintf(commandLine, command, scriptManager.c_str(), "report", reportType, result);
+		char * outFilePath = GetTmpFilePath();
 
-		OutInfo outInfo = RunProcess(commandLine);
+		sprintf(commandLine, command, scriptManager.c_str(), "remove", removeTarget, result, outFilePath);
+		sprintf(_outFilePath, "%s", outFilePath);
 
-		std::string sa(scriptAction);
-		std::string vr = "eval('var lm = " + outInfo.out + ";');";
-		std::string rs = vr + sa;
+		if (AVDocClose(avDoc, false) == false) {
+			AVAlertNote("Document close cancelled");
+		}
+		else {
+			OutInfo outInfo = RunProcess(commandLine);
 
-		RunSimpleCommand((char *)rs.c_str());
+			CopyFileA(_outFilePath, result, false);
+			DWORD dw = GetLastError();
+
+			char messageW[600];
+
+			sprintf(messageW, "Task '%s' done, error code: '%d'", removeTarget, dw);
+
+			ASFileSys fileSys = ASGetDefaultFileSys();
+			const char * strPathFlag = "Cstring";
+			ASPathName pathName = ASFileSysCreatePathName(fileSys, ASAtomFromString(strPathFlag), result, NULL);
+
+			AVDocOpenFromFile(pathName, fileSys, NULL);
+
+			AVAlertNote(messageW);
+		}
 	}
 }
